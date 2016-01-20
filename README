@@ -1,0 +1,65 @@
+README: Is named README. Describe all design decisions. How do you select the key size?
+How do you handle files that are not a multiple of the cipher block encoding size? What do you
+store in the preamble?
+
+Design:
+
+	User Code:
+		1. All inputs are taken as per the instructions given in homework 1.
+		2. The password entered by user is hashed here using MD5 algorithm.
+		3. The key size is 16B as it is the standard key length of MD5 algorithm.
+		4. A structure with all user inputs and computed value of key and key length is sent as a 
+		   void pointer to the system call.
+		
+	Kernel Code:
+		Kernel code is divided into three main functions:
+		1. xcrypt: It is the system call function.
+			xcrypt functions:
+			a. User arguments are copied from user space to kernel space. Hence, userspace/kernelspace
+				memory validations are done(access_ok is done from copy_from_user).
+			b. Validate that user has specified actual files by ckecking the kstat structure of 
+				both files.
+			c. Open the files in respective modes.
+			d. Check if the files are different or hard linked to each other by comparing inodes.
+				If files are same/hard linked to each other, return appropriate failiure message.
+			e. Call the rwfile function.
+			f. free memory.
+			
+		2. rwfile: It performs the file read write operations.
+			a. Open a temporary file.
+			b. Apply SHA1 hash on the key.
+				i.  In case of encryption, store it as preamble on the temp file.
+				ii. In case of decryption, extract preamble from infile,compare it with 
+					computed hash of key. If they do not match, the key given by user is wrong.
+			c. Perform block wise read of input file, store it in buffer, call function crypt 
+				for encryption/decryption, write the returned write buffer to file.
+				Here, size of read/write buffer is PAGE_SIZE because encryption/decryption is 
+				performed on scatterlist objects which are size of PAGE_SIZE. Hence, its efficient 
+				to make the size as PAGE_SIZE.
+			d. Rename the temporaray file as the user output file. This is done so that in case of
+				partial write failiures, no output is generated. 
+			e. Unlink the temporary file.
+			f. Free memory.
+			
+		3. crypt: It performs encryption/decryption operation on buffers given to it.
+			a. Define an initialization vector for overcoming dictionary attacks.
+			b. Set the encryption/decryption as aes with ctr(non-padding) mode.
+			c. Set the key.
+			d. Set the initialization vector.
+			e. Set the input/output scatterlists and link them with read/write buffers.
+			   It is done so because the encryption/decryption function takes scatterlists as input.
+			f. Perform encryption/decryption.
+			e. Free memory.
+			
+		4. sha: The function computes the sha hash for a string.	
+			
+
+References:
+		1. http://lxr.free-electrons.com/
+		2. https://www.cs.rutgers.edu/~pxk/416/notes/c-tutorials/getopt.html
+		3. http://lxr.free-electrons.com/ident?i=crypto_blkcipher_encrypt
+		4. wbsun.blogspot.com
+		5. http://lxr.fsl.cs.sunysb.edu/linux/source/net/ceph/crypto.c#L163
+		6. http://www.chronox.de/crypto-API/ch06s02.html
+		7. http://wbsun.blogspot.com/2011/01/use-kernel-crypto-lib.html
+		8. Classnotes and in-homework examples
